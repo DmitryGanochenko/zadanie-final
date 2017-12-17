@@ -1,0 +1,99 @@
+- hosts: all
+  vars:
+    - mysql_root_password: "SqLpAsS"
+  tasks:
+   - name: Install all
+     apt: name={{ item }} update_cache=yes state=present
+     with_items:
+        - nginx
+        - apache2
+        - php7.0
+        - libapache2-mod-php7.0
+        - php7.0-mbstring
+        - libapache2-mpm-itk
+        - php7.0-xml
+        - unzip
+        - mysql-server
+        - mysql-client
+        - python-mysqldb
+        - sendmail
+
+   - name: Update mysql root password for all root accounts "{{ mysql_root_password }}"
+     mysql_user: name=root password="{{ mysql_root_password }}" priv="*.*:ALL,GRANT"
+
+   - name: Create .my.cnf
+     template:
+      src: "files/client.my.cnf"
+      dest: "/root/.my.cnf"
+      owner: root
+      group: root
+      mode: 0600
+
+   - name: Set MySQL number of connections
+     copy: src=max_connections.cnf dest=/etc/mysql/conf.d/max_connections.cnf
+
+   - name: restart mysql
+     service: name=mysql state=restarted
+
+   - name: Create directories
+     file: path={{item}} state=directory  mode=0755
+     with_items:
+        - /var/www/test1.local
+        - /var/www/test2.local
+        - /etc/nginx/sites-available
+
+   - name: Enable mpm-itk
+     apache2_module: name={{item}} state=present
+     with_items:
+        - mpm_prefork
+        - mpm_itk
+   - name: Add groups
+     group: name={{item}} state=present
+     with_items:
+        - testwww1
+        - testwww2
+
+   - name: add several users
+     user: name={{ item.name }} groups={{ item.groups}} state=present
+     with_items:
+        - { name: testwww1, groups: testwww1 }
+        - { name: testwww2, groups: testwww2 }
+
+   - name: add www-data to our groups
+     user: name=www-data groups=testwww1,testwww2 append=yes
+
+   - name: Copy all we need
+     copy: src={{ item.src }} dest={{ item.dest }}
+     with_items:
+        - { src: 'test1.conf', dest: '/etc/nginx/sites-available/test1.conf' }
+        - { src: 'test2.conf', dest: '/etc/nginx/sites-available/test2.conf' }
+        - { src: 'nginx.conf', dest: '/etc/nginx/nginx.conf' }
+        - { src: 'ports.conf', dest: '/etc/apache2/ports.conf' }
+        - { src: '000-default.conf', dest: '/etc/apache2/sites-available/000-default.conf' }
+        - { src: '001-default.conf', dest: '/etc/apache2/sites-available/001-default.conf' }
+        - { src: 'GetSimpleCMS.zip', dest: '/tmp/GetSimpleCMS.zip' }
+
+   - name: Unarchive a cms
+     unarchive: src=/tmp/GetSimpleCMS.zip dest={{item}} copy=no
+     with_items:
+        - /var/www/test1.local
+        - /var/www/test2.local
+
+   - name: ownership of test1
+     file: path=/var/www/{{item.host}} owner={{item.user}} group={{item.user}} mode=0750 state=directory recurse=yes
+     with_items:
+        - { host: 'test1.local', user: 'testwww1' }
+        - { host: 'test2.local', user: 'testwww2' }
+
+   - name: vhost test2.local apache link
+     file: src=/etc/apache2/sites-available/001-default.conf dest=/etc/apache2/sites-enabled/001-default.conf state=link
+
+   - name: php.ini - Change memory limit to 256M
+     replace: dest=/etc/php/7.0/apache2/php.ini regexp='^memory_limit = .*$' replace='memory_limit = 256M'
+
+   - name: restart apache2
+     service: name=apache2 state=restarted
+
+   - name: restart nginx
+     service: name=nginx state=restarted
+
