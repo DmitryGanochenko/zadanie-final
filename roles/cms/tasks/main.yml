@@ -1,0 +1,56 @@
+---
+
+   - name: Create dirs for site
+     file: path={{item}} state=directory  mode=0755
+     with_items:
+        - /var/www/test1.local
+        - /var/www/test2.local
+        - /etc/nginx/sites-available
+
+   - name: Enable mpm-itk
+     apache2_module: name={{item}} state=present
+     with_items:
+        - mpm_prefork
+        - mpm_itk
+
+   - name: Add groups for mpm-itk
+     group: name={{item}} state=present
+     with_items:
+        - testwww1
+        - testwww2
+
+   - name: Add users for mpm-itk
+     user: name={{ item.name }} groups={{ item.groups}} state=present
+     with_items:
+        - { name: testwww1, groups: testwww1 }
+        - { name: testwww2, groups: testwww2 }
+
+   - name: Add www-data to our groups
+     user: name=www-data groups=testwww1,testwww2 append=yes
+
+   - name: Copy all we need
+     copy: src={{ item.src }} dest={{ item.dest }}
+     with_items:
+        - { src: 'test1.conf', dest: '/etc/nginx/sites-available/test1.conf' }
+        - { src: 'test2.conf', dest: '/etc/nginx/sites-available/test2.conf' }
+        - { src: 'nginx.conf', dest: '/etc/nginx/nginx.conf' }
+        - { src: 'ports.conf', dest: '/etc/apache2/ports.conf' }
+        - { src: '000-default.conf', dest: '/etc/apache2/sites-available/000-default.conf' }
+        - { src: '001-default.conf', dest: '/etc/apache2/sites-available/001-default.conf' }
+        - { src: 'GetSimpleCMS.zip', dest: '/tmp/GetSimpleCMS.zip' }
+
+   - name: Unarchive a cms
+     unarchive: src=/tmp/GetSimpleCMS.zip dest={{item}} copy=no
+     with_items:
+        - /var/www/test1.local
+        - /var/www/test2.local
+
+   - name: Ownership of site folders
+     file: path=/var/www/{{item.host}} owner={{item.user}} group={{item.user}} mode=0750 state=directory recurse=yes
+     with_items:
+        - { host: 'test1.local', user: 'testwww1' }
+        - { host: 'test2.local', user: 'testwww2' }
+
+   - name: vhost test2.local apache link
+     file: src=/etc/apache2/sites-available/001-default.conf dest=/etc/apache2/sites-enabled/001-default.conf state=link
+

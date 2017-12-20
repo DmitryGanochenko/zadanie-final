@@ -1,0 +1,27 @@
+---
+
+   - name: Update mysql root password for all root accounts "{{ mysql_root_password }}"
+     mysql_user: name=root password="{{ mysql_root_password }}" priv="*.*:ALL,GRANT"
+
+   - name: Create .my.cnf
+     template:
+      src: "client.my.cnf"
+      dest: "/root/.my.cnf"
+      owner: root
+      group: root
+      mode: 0600
+
+   - name: Set MySQL number of connections
+     copy: src=max_connections.cnf dest=/etc/mysql/conf.d/max_connections.cnf
+
+   - name: Restart mysql
+     service: name=mysql state=restarted
+
+   - name: php.ini - Change memory limit to 256M
+     replace: dest=/etc/php/7.0/apache2/php.ini regexp='^memory_limit = .*$' replace='memory_limit = 256M'
+
+   - name: Restart apache2
+     service: name=apache2 state=restarted
+
+   - name: Restart nginx
+     service: name=nginx state=restarted
